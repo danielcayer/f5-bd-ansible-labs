@@ -1,6 +1,6 @@
 [all:vars]
 ansible_user=admin
-ansible_password=Canadaops123!
+ansible_password=xxxx
 ansible_port=22
 ansible_become_pass="{{ ansible_password }}"
 
