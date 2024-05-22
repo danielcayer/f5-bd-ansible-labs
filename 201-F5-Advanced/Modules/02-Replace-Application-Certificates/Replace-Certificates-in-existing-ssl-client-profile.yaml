@@ -4,9 +4,16 @@
   connection: local
   gather_facts: false
   vars:
-      SSL_Cert: localCA/webcert.crt
-      SSL_Key: localCA/webcert.key
-      SSL_CA: localCA/localCA.crt
+      SSL_Cert: /tmp/localCA/webcert.crt
+      SSL_Key: /tmp/localCA/webcert.key
+      SSL_CA: /tmp/localCA/localCA.crt
+# Environment variables defined
+
+# Usage
+# The name of the SSL client profile can be passed as an argument for full automation.
+# The CA and web certificate and private keys PEM-encoded files located as defined in the vars above.
+# For example:
+#     ansible-playbook Replace-Certificates-in-existing-ssl-client-profile.yaml -i hosts -e "F5_SSL_Client_Profile=Demo_Client_SSL_profile"
 
   tasks:
 
@@ -33,7 +40,7 @@
 # The next few tasks will only run if the name of the F5_SSL_Client_Profile variable is undefined.
 # This variable can be set at runtime if full automation is desired (with the "-e" parameter, or in the f5_vars.yml file).
 # For example:
-#     ansible-playbook Replace-Certificates-in-existing-ssl-client-profile.yaml -i hosts -e @f5_vars.yml -e "F5_SSL_Client_Profile=Demo_Client_SSL_profile"
+#     ansible-playbook Replace-Certificates-in-existing-ssl-client-profile.yaml -i hosts -e "F5_SSL_Client_Profile=DemoClientSSLprofile"
 
 # If the name of the F5_SSL_Client_Profile variable is undefined, retrieve and compile a
 # complete list of all the virtual server names configured on the active BIG-IP.
@@ -43,7 +50,7 @@
          - virtual-servers
         provider: "{{provider}}"
       register: facts_result
-      when: 
+      when:
       - '"Active" in result.stdout'
       - F5_SSL_Client_Profile is undefined
 
