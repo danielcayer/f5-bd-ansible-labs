@@ -1,0 +1,15 @@
+[all:vars]
+ansible_user=admin
+ansible_password=Canadaops123!
+ansible_port=22
+ansible_become_pass="{{ ansible_password }}"
+
+[lb]
+f5 ansible_host=8ef05ad8-9744-417b-9e6f-4b667886cb9e.access.udf.f5.com f5_admin_user=xxxx f5_admin_password=xxxx f5_server_port=443 ansible_python_interpreter=auto_silent
+
+[control]
+ansible ansible_host=10.1.1.4 ansible_user=rhel-user private_ip=10.1.1.4
+
+[web]
+node1 ansible_host=10.1.1.5 ansible_user=rhel-user private_ip=10.1.10.5
+node2 ansible_host=10.1.1.6 ansible_user=rhel-user private_ip=10.1.10.6

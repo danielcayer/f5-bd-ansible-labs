@@ -1,0 +1,13 @@
+[exts]
+
+extendedKeyUsage = serverAuth, clientAuth, codeSigning, emailProtection
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+subjectAltName = @alt_names
+[alt_names]
+DNS.1   = vpn.f5demo.com
+DNS.2   = vanilla.f5demo.com
+DNS.3   = bluesky.f5demo.com
+DNS.4   = www.f5demo.com
+DNS.5   = 10.1.10.101
+DNS.6 = dancayer-app1.canadacentral.cloudapp.azure.com

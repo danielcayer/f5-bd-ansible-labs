@@ -1,0 +1,198 @@
+---
+- name: BIG-IP SETUP
+  hosts: lb
+  connection: local
+  gather_facts: false
+  vars:
+      SSL_Cert: localCA/webcert.crt
+      SSL_Key: localCA/webcert.key
+      SSL_CA: localCA/localCA.crt
+
+  tasks:
+
+    - name: Setup provider
+      ansible.builtin.set_fact:
+        provider:
+          server: "{{ ansible_host }}"
+          user: "{{ f5_admin_user }}"
+          password: "{{ f5_admin_password }}"
+          server_port: "{{ f5_server_port }}"
+          no_f5_teem: true
+          validate_certs: false
+
+# Assume that auto-config-synch is enabled... only apply config changes to BIG-IP that is active
+    - name: Find Active Machine
+      f5networks.f5_modules.bigip_command:
+        provider: "{{ provider }}"
+        match: "any"
+        warn: no
+        commands:
+          - bash -c "cat /var/prompt/ps1"
+      register: result
+
+# The next few tasks will only run if the name of the F5_SSL_Client_Profile variable is undefined.
+# This variable can be set at runtime if full automation is desired (with the "-e" parameter, or in the f5_vars.yml file).
+# For example:
+#     ansible-playbook Replace-Certificates-in-existing-ssl-client-profile.yaml -i hosts -e @f5_vars.yml -e "F5_SSL_Client_Profile=Demo_Client_SSL_profile"
+
+# If the name of the F5_SSL_Client_Profile variable is undefined, retrieve and compile a
+# complete list of all the virtual server names configured on the active BIG-IP.
+    - name: Collect information of all virtual servers
+      bigip_device_info:
+        gather_subset:
+         - virtual-servers
+        provider: "{{provider}}"
+      register: facts_result
+      when: 
+      - '"Active" in result.stdout'
+      - F5_SSL_Client_Profile is undefined
+
+    - name: Store the virtual server names in a variable
+      no_log: True
+      set_fact:
+            list_of_virtual_server_names: '{{ list_of_virtual_server_names | default([]) + [item.name] }}'
+      with_items: '{{facts_result.virtual_servers}}'
+      when:
+      - F5_SSL_Client_Profile is undefined
+
+# If the name of the F5_SSL_Client_Profile variable is undefined, display the list of VS names
+# on the administrator's screen so that they may pick out and type-in the correct one.
+    - name: Display the list of virtual servers found
+      debug:
+        var: list_of_virtual_server_names
+      when:
+      - F5_SSL_Client_Profile is undefined
+
+# If the name of the F5_SSL_Client_Profile variable is undefined, interactively prompt
+# the administrator for the exact name of the VS.
+    - pause:
+        prompt: Please enter the exact name of the virtual server (case-sensitive). Condiser using Cut & Paste to avoid mistakes. Leave empty (press Enter/return) to skip.
+        echo: true
+      register: target_virtual_server_name
+      when:
+      - F5_SSL_Client_Profile is undefined
+
+# If the name of the F5_SSL_Client_Profile variable is undefined and a VS name was provided above,
+#  extract the complete list of all profiles attached to the provided virtual server.
+    - name: Register all profiles attached to the target virtual server
+      set_fact:
+        vs_profiles: "{{item}}"
+      loop:
+        - { name: "{{facts_result.virtual_servers | json_query(query_string)}}", context: "{{facts_result.virtual_servers | json_query(query_clientside)}}" }
+      vars:
+        query_string: "[?name=='{{target_virtual_server_name.user_input | default('blank', true)}}'].profiles[*].name"
+        query_clientside: "[?name=='{{target_virtual_server_name.user_input | default('blank', true)}}'].profiles[*].context"
+      when: 
+      - F5_SSL_Client_Profile is undefined
+      - target_virtual_server_name.user_input | default('', true) | trim != ''
+      # Note: The context captured above is not used in this version of the playbook because 
+      #       we're expecting all profiles to be client-side. Capturing the context could be
+      #       useful to allow attachment of both client-side and server-side profiles in 
+      #       future versions of this playbook.
+
+# # If the name of the F5_SSL_Client_Profile variable is undefined, display the list on 
+# the administrator's screen so that they may pick out and type-in the correct one.
+# (There is no "eazy" method to identify which of the profiles attached to a VS is the client-ssl profile.)
+    - name: Display the list of all profiles attached to the target virtual server
+      debug:
+        var: vs_profiles.name
+      when: 
+      - F5_SSL_Client_Profile is undefined
+      - target_virtual_server_name.user_input | default('', true) | trim != ''
+
+# If the name of the F5_SSL_Client_Profile variable is undefined, prompt the administrator
+# for the name of the SSL client profile to be updated.
+# (There is no "eazy" method to identify which of the profiles attached to a VS is the client-ssl profile.)
+    - pause:
+        prompt: Please enter the exact name of the SSL Client Profile (case-sensitive). Condiser using Cut & Paste to avoid mistakes. Leave empty (press Enter/return) to skip.
+        echo: true
+      register: target_ssl_client_profile_name
+      when:
+      - F5_SSL_Client_Profile is undefined
+
+    - name: Display the captured user input
+      debug:
+        var: target_ssl_client_profile_name.user_input
+      when: 
+      - F5_SSL_Client_Profile is undefined
+#      - target_ssl_client_profile_name.user_input | default('', true) | trim != ''
+
+    - name: Set name of SSL Client Profile as entered by adminstrator above
+      set_fact:
+            F5_SSL_Client_Profile: "DemoClientSSLprofile"
+      when:
+      - F5_SSL_Client_Profile is undefined
+      - '"False" not in target_ssl_client_profile_name.user_input'
+
+    # - name: Display the name of the SSL Client profile
+    #   debug:
+    #     var: F5_SSL_Client_Profile
+
+# A random nuber is used to name the new certs... useful for troubleshooting or to roll-back/back-out.
+    - name: set random number
+      set_fact:
+        random_number: "{{ 999 | random }}"
+      run_once: yes
+
+    - name: Display the name of the new cert to be uploaded (with its new random number)
+      debug:
+        msg: 
+        - Web Cert (and key) name is {{ F5_SSL_Client_Profile }}_Cert_{{ random_number }}
+        - CA Cert name is {{ F5_SSL_Client_Profile }}_CA_Cert_{{ random_number }}
+
+# The certificate and private key file locations are defined as variables in the f5_vars.yml file.
+# The following upload tasks would need to be modified/replaced to integrate
+# with a 3rd party cert management solution (such as Venafi or Let's Encrypt).
+    - name: Upload new SSL CA cert
+      f5networks.f5_modules.bigip_ssl_certificate:
+        provider: "{{ provider }}"
+        name: "{{ F5_SSL_Client_Profile }}_CA_Cert_{{ random_number }}"
+        content: "{{ lookup('file', SSL_CA) }}"
+      when: 
+      - '"Active" in result.stdout'
+
+    - name: Upload SSL web cert
+      f5networks.f5_modules.bigip_ssl_certificate:
+        provider: "{{ provider }}"
+        name: "{{ F5_SSL_Client_Profile }}_Cert_{{ random_number }}"
+        content: "{{ lookup('file', SSL_Cert) }}"
+      when: 
+      - '"Active" in result.stdout'
+
+    - name: upload SSL key
+      f5networks.f5_modules.bigip_ssl_key:
+        provider: "{{ provider }}"
+        name: "{{ F5_SSL_Client_Profile }}_Cert_{{ random_number }}"
+        content: "{{ lookup('file', SSL_Key) }}"
+      when: 
+      - '"Active" in result.stdout'
+
+    - name: Create new or update existing client SSL profile with new cert/key/chain
+      f5networks.f5_modules.bigip_profile_client_ssl:
+        provider: "{{ provider }}"
+        state: present
+        name: "{{ F5_SSL_Client_Profile | trim }}"
+        cert_key_chain:
+        - cert: "{{ F5_SSL_Client_Profile }}_Cert_{{ random_number }}"
+          key: "{{ F5_SSL_Client_Profile }}_Cert_{{ random_number }}"
+          chain: "{{ F5_SSL_Client_Profile }}_CA_Cert_{{ random_number }}"
+      when: 
+      - (target_ssl_client_profile_name.user_input | default('', true) | trim != '') or (F5_SSL_Client_Profile is defined)
+      - '"Active" in result.stdout'
+
+    - name: SAVE RUNNING CONFIG ON BIG-IP
+      f5networks.f5_modules.bigip_config:
+        provider: "{{ provider }}"
+        save: true
+      when: '"Active" in result.stdout'
+
+# This playbook does not modify virtual servers on the BIG-IP.
+# It uploads new certificates and creates or modifies a Client SSL profile.
+# If the profile is already attached to a virtual server, new connections to 
+# this VS will perform a new SSL handshake using the new certs.
+
+# To do:
+# - Automate certificate management for server-side too? 
+# - Add pre and post validation test to verify status of the certificate before and after?
+# - Clean-up/delete old expired certs?
+# - Augment/improve authentication to not require username and password variables.
