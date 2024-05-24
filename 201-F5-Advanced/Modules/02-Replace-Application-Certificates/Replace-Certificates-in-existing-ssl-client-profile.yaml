@@ -38,7 +38,7 @@
       register: result
 
 # The next few tasks will only run if the name of the F5_SSL_Client_Profile variable is undefined.
-# This variable can be set at runtime if full automation is desired (with the "-e" parameter, or in the f5_vars.yml file).
+# This variable can be set at runtime if full automation is desired.
 # For example:
 #     ansible-playbook Replace-Certificates-in-existing-ssl-client-profile.yaml -i hosts -e "F5_SSL_Client_Profile=DemoClientSSLprofile"
 
@@ -97,9 +97,9 @@
       #       useful to allow attachment of both client-side and server-side profiles in 
       #       future versions of this playbook.
 
-# # If the name of the F5_SSL_Client_Profile variable is undefined, display the list on 
+# If the name of the F5_SSL_Client_Profile variable is undefined, display the list on 
 # the administrator's screen so that they may pick out and type-in the correct one.
-# (There is no "eazy" method to identify which of the profiles attached to a VS is the client-ssl profile.)
+# (I have not found an "eazy" method to identify which of the profiles attached to a VS is the client-ssl profile...)
     - name: Display the list of all profiles attached to the target virtual server
       debug:
         var: vs_profiles.name
@@ -109,7 +109,7 @@
 
 # If the name of the F5_SSL_Client_Profile variable is undefined, prompt the administrator
 # for the name of the SSL client profile to be updated.
-# (There is no "eazy" method to identify which of the profiles attached to a VS is the client-ssl profile.)
+# (I have not found an "eazy" method to identify which of the profiles attached to a VS is the client-ssl profile...)
     - pause:
         prompt: Please enter the exact name of the SSL Client Profile (case-sensitive). Condiser using Cut & Paste to avoid mistakes. Leave empty (press Enter/return) to skip.
         echo: true
@@ -131,10 +131,6 @@
       - F5_SSL_Client_Profile is undefined
       - '"False" not in target_ssl_client_profile_name.user_input'
 
-    # - name: Display the name of the SSL Client profile
-    #   debug:
-    #     var: F5_SSL_Client_Profile
-
 # A random nuber is used to name the new certs... useful for troubleshooting or to roll-back/back-out.
     - name: set random number
       set_fact:
@@ -147,7 +143,7 @@
         - Web Cert (and key) name is {{ F5_SSL_Client_Profile }}_Cert_{{ random_number }}
         - CA Cert name is {{ F5_SSL_Client_Profile }}_CA_Cert_{{ random_number }}
 
-# The certificate and private key file locations are defined as variables in the f5_vars.yml file.
+# The certificate and private key file locations are defined as variables above.
 # The following upload tasks would need to be modified/replaced to integrate
 # with a 3rd party cert management solution (such as Venafi or Let's Encrypt).
     - name: Upload new SSL CA cert
