@@ -5,7 +5,7 @@ ansible_port=22
 ansible_become_pass="{{ ansible_password }}"
 
 [lb]
-f5 ansible_host=e1bdd6e4-fe31-4383-aedb-917ce9b43d28.access.udf.f5.com f5_admin_user=admin f5_admin_password=Ansible123! f5_server_port=443 ansible_python_interpreter=auto_silent
+f5 ansible_host=x.x.x.x f5_admin_user=<admin_user> f5_admin_password=<password> f5_server_port=443 ansible_python_interpreter=auto_silent
 
 [control]
 ansible ansible_host=10.1.1.4 ansible_user=rhel-user private_ip=10.1.1.4
